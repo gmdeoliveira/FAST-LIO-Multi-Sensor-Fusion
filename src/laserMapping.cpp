@@ -728,12 +728,13 @@ bool sync_packages(MeasureGroup &meas)
     {
         meas.wheel.clear();
         double wheel_time = wheel_buffer.front()->header.stamp.toSec();
-        while ((!wheel_buffer.empty()) && (wheel_time < lidar_end_time)) //记录wheel数据，wheel时间小于当前帧lidar结束时间
+        //Record wheel data; wheel time is less than the end time of the current frame's lidar. [记录wheel数据，wheel时间小于当前帧lidar结束时间]
+        while ((!wheel_buffer.empty()) && (wheel_time < lidar_end_time)) 
                         {
             wheel_time = wheel_buffer.front()->header.stamp.toSec();
             if (wheel_time > lidar_end_time)
                             break;
-            meas.wheel.push_back(wheel_buffer.front()); //记录当前lidar帧内的wheel数据到meas.wheel
+            meas.wheel.push_back(wheel_buffer.front()); //Record the wheel data within the current lidar frame to meas.wheel [记录当前lidar帧内的wheel数据到meas.wheel]
             wheel_buffer.pop_front();
         }
     }
@@ -781,7 +782,10 @@ void map_incremental()
             mid_point.y = floor(feats_down_world->points[i].y/filter_size_map_min)*filter_size_map_min + 0.5 * filter_size_map_min;
             mid_point.z = floor(feats_down_world->points[i].z/filter_size_map_min)*filter_size_map_min + 0.5 * filter_size_map_min;
             float dist  = calc_dist(feats_down_world->points[i],mid_point);
-            if (fabs(points_near[0].x - mid_point.x) > 0.5 * filter_size_map_min && fabs(points_near[0].y - mid_point.y) > 0.5 * filter_size_map_min && fabs(points_near[0].z - mid_point.z) > 0.5 * filter_size_map_min){
+            if (fabs(points_near[0].x - mid_point.x) > 0.5 * filter_size_map_min && 
+                fabs(points_near[0].y - mid_point.y) > 0.5 * filter_size_map_min && 
+                fabs(points_near[0].z - mid_point.z) > 0.5 * filter_size_map_min)
+            {
                 PointNoNeedDownsample.push_back(feats_down_world->points[i]);
                 continue;
             }
@@ -1039,7 +1043,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         // jacobian
         M3D rot_crossmat;
         V3D tmp_vel = s.rot.toRotationMatrix().transpose() * s.vel;
-        rot_crossmat << SKEW_SYM_MATRX(tmp_vel); // 当前状态imu系下 点坐标反对称矩阵
+        rot_crossmat << SKEW_SYM_MATRX(tmp_vel); // Antisymmetric matrix of point coordinates in the current state IMU system [当前状态imu系下 点坐标反对称矩阵]
         ekfom_data.h_x.block<3, 3>(0,3) = -s.offset_R_W_I.toRotationMatrix().transpose() * rot_crossmat; // diff w.r.t. rot
         ekfom_data.h_x.block<3, 3>(0,12) = -s.offset_R_W_I.toRotationMatrix().transpose() * s.rot.toRotationMatrix().transpose(); // diff w.r.t. vel
         M3D bg_crossmat;
@@ -1151,9 +1155,9 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
     double solve_start_  = omp_get_wtime();
     
 
-    /*** Computation of Measuremnt Jacobian matrix H and measurents vector ***/
-        ekfom_data.h_x = MatrixXd::Zero(effct_feat_num, 12); //23
-        ekfom_data.h.resize(effct_feat_num);
+    /*** Computation of Measuremnt Jacobian matrix H and measurements vector ***/
+    ekfom_data.h_x = MatrixXd::Zero(effct_feat_num, 12); //23
+    ekfom_data.h.resize(effct_feat_num);
 
     for (int i = 0; i < effct_feat_num; i++)
     {
@@ -1182,7 +1186,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
             ekfom_data.h_x.block<1, 12>(i,0) << norm_p.x, norm_p.y, norm_p.z, VEC_FROM_ARRAY(A), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
         }
 
-        /*** Measuremnt: distance to the closest surface/corner ***/
+        /*** Measurement: distance to the closest surface/corner ***/
         ekfom_data.h(i) = -norm_p.intensity;
     }
 
@@ -1456,8 +1460,10 @@ int main(int argc, char** argv)
             /*** iterated state estimation ***/
             double t_update_start = omp_get_wtime();
             double solve_H_time = 0;
-            kf.update_iterated_dyn_share_modified(LASER_POINT_COV, solve_H_time);
-            state_point = kf.get_x();
+            
+            kf.update_iterated_dyn_share_modified(LASER_POINT_COV, solve_H_time); // The Update Step (LiDAR-to-Map Matching)
+            state_point = kf.get_x(); // Get the corrected state
+            
             euler_cur = SO3ToEuler(state_point.rot);
             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
             geoQuat.x = state_point.rot.coeffs()[0];
@@ -1480,7 +1486,7 @@ int main(int argc, char** argv)
             if (scan_pub_en || pcd_save_en)      publish_frame_world(pubLaserCloudFull);
             if (scan_pub_en && scan_body_pub_en) publish_frame_body(pubLaserCloudFull_body);
             // publish_effect_world(pubLaserCloudEffect);
-             publish_map(pubLaserCloudMap);
+            publish_map(pubLaserCloudMap);
 
             /*** Debug variables ***/
             if (runtime_pos_log)

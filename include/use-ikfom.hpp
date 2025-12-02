@@ -9,6 +9,7 @@ typedef MTK::S2<double, 98012, 10000, 1> S2;
 typedef MTK::vect<1, double> vect1;
 typedef MTK::vect<2, double> vect2;
 
+//State definition (it's a little bit different from Fast-LIO2)
 MTK_BUILD_MANIFOLD(state_ikfom,
 ((vect3, pos))
 ((SO3, rot))
@@ -17,18 +18,20 @@ MTK_BUILD_MANIFOLD(state_ikfom,
 ((vect3, vel))
 ((vect3, bg))
 ((vect3, ba))
-((S2, grav)) //S2流形,grav为负值
+((S2, grav)) //S2 manifold, grav is negative. [S2流形,grav为负值]
 ((SO3, offset_R_W_I))
 ((vect3, offset_T_W_I))
 ((vect1, wheel_s))
 ((SO3, offset_R_G_I))
 );
 
+//IKFoM inputs definition 
 MTK_BUILD_MANIFOLD(input_ikfom,
 ((vect3, acc))
 ((vect3, gyro))
 );
 
+//IKFoM process noise definition 
 MTK_BUILD_MANIFOLD(process_noise_ikfom,
 ((vect3, ng))
 ((vect3, na))

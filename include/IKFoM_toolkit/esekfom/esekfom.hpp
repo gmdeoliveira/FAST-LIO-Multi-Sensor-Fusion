@@ -1656,8 +1656,6 @@ public:
 			x_.boxminus(dx, x_propagated);
 			dx_new = dx;
 			
-			
-			
 			P_ = P_propagated;
 			
 			Matrix<scalar_type, 3, 3> res_temp_SO3;
@@ -1805,7 +1803,7 @@ public:
 				*/
 				cov P_inv = P_temp.inverse(); // (H_T_H + P^-1)^-1
 				//std::cout << "line 1781" << std::endl;
-				K_h = P_inv. template block<n, 12>(0, 0) * h_x_.transpose() * dyn_share.h; // (H_T_H + P^-1)^-1 * H^T * h(残差) = K * h
+				K_h = P_inv. template block<n, 12>(0, 0) * h_x_.transpose() * dyn_share.h; // (H_T_H + P^-1)^-1 * H^T * h(residual [残差]) = K * h
 				//std::cout << "line 1780" << std::endl;
 				//cov HTH_cur = cov::Zero();
 				//HTH_cur. template block<12, 12>(0, 0) = HTH;
@@ -1816,9 +1814,9 @@ public:
 			}
 
 			//K_x = K_ * h_x_;
-			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; //误差增量后验 K*h + (K*H - I) dx
+			Matrix<scalar_type, n, 1> dx_ = K_h + (K_x - Matrix<scalar_type, n, n>::Identity()) * dx_new; //Error increment posterior [误差增量后验] K*h + (K*H - I) dx
 			state x_before = x_;
-			x_.boxplus(dx_); //根据计算得到的误差增量后验，更新状态量
+			x_.boxplus(dx_); //Update the state variables based on the calculated error increment posterior. [根据计算得到的误差增量后验，更新状态量]
 			dyn_share.converge = true;
 			for(int i = 0; i < n ; i++)
 			{

@@ -338,7 +338,7 @@ void ImuProcess::UndistortPcl(MeasureGroup &meas, esekfom::esekf<state_ikfom, 12
     Q.block<3, 3>(3, 3).diagonal() = cov_acc;
     Q.block<3, 3>(6, 6).diagonal() = cov_bias_gyr;
     Q.block<3, 3>(9, 9).diagonal() = cov_bias_acc;
-    //向前传播
+    //Forward propagation [向前传播]
     kf_state.predict(dt, Q, in);// normal predict
 
     /*** update by gnss meas ***/
@@ -367,22 +367,23 @@ void ImuProcess::UndistortPcl(MeasureGroup &meas, esekfom::esekf<state_ikfom, 12
             }
         }
     }
-      /*** update by wheel meas ***/
-      if (USE_WHEEL && !meas.wheel.empty())
-      {
-          double wheel_time = meas.wheel.front()->header.stamp.toSec();
-          if (wheel_time < head->header.stamp.toSec()){
-              meas.wheel.pop_front();
-          }else{
-              if (wheel_time < tail->header.stamp.toSec()){ // wheel 位于两个imu之间
-                  opt_with_wheel = true;
-                  kf_state.update_iterated_dyn_share(); // wheel更新
+    
+    /*** update by wheel meas ***/
+    if (USE_WHEEL && !meas.wheel.empty())
+    {
+        double wheel_time = meas.wheel.front()->header.stamp.toSec();
+        if (wheel_time < head->header.stamp.toSec()){
+            meas.wheel.pop_front();
+        }else{
+            if (wheel_time < tail->header.stamp.toSec()){ // The wheel is located between the two IMUs. [wheel 位于两个imu之间]
+                opt_with_wheel = true;
+                kf_state.update_iterated_dyn_share(); // Wheel update [wheel更新]
 //                cout << "wheel update !" << endl;
-                  opt_with_wheel = false;
-                  meas.wheel.pop_front();
-              }
-          }
-      }
+                opt_with_wheel = false;
+                meas.wheel.pop_front();
+            }
+        }
+    }
 
     /* save the poses at each IMU measurements */
     imu_state = kf_state.get_x();
@@ -497,7 +498,7 @@ void ImuProcess::Process(MeasureGroup &meas,  esekfom::esekf<state_ikfom, 12, in
       }
   }
 
-  //畸变纠正
+  //Distortion correction [畸变纠正]
   UndistortPcl(meas, kf_state, *cur_pcl_un_);
 
   t2 = omp_get_wtime();
