@@ -84,11 +84,11 @@ double time_diff_lidar_to_imu = 0.0;
 
 mutex mtx_buffer;
 condition_variable sig_buffer;
-mutex veloLock;
+mutex veloLock; //wheel (?)
 
 string root_dir = ROOT_DIR;
 string map_file_path, lid_topic, lid_topic_left, lid_topic_right, imu_topic, wheel_topic;
-double wheel_velocity = 0.0;
+double wheel_velocity = 0.0; 
 
 double res_mean_last = 0.05, total_residual = 0.0;
 double last_timestamp_lidar = 0, last_timestamp_imu = -1.0, last_timestamp_wheel = -1.0;
@@ -106,13 +106,13 @@ vector<BoxPointType> cub_needrm;
 vector<PointVector>  Nearest_Points;
 vector<double>       extrinT(3, 0.0);
 vector<double>       extrinR(9, 0.0);
-vector<double>       extrinT_wheel(3, 0.0);
-vector<double>       extrinR_wheel(9, 0.0);
+vector<double>       extrinT_wheel(3, 0.0); 
+vector<double>       extrinR_wheel(9, 0.0); 
 vector<double>       wheel_scale(1, 1.0);
 deque<double>                     time_buffer;
 deque<PointCloudXYZI::Ptr>        lidar_buffer;
 deque<sensor_msgs::Imu::ConstPtr> imu_buffer;
-deque<nav_msgs::OdometryConstPtr> wheel_buffer;
+deque<nav_msgs::OdometryConstPtr> wheel_buffer; 
 
 PointCloudXYZI::Ptr featsFromMap(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
@@ -236,7 +236,6 @@ void pointBodyToWorld_ikfom(PointType const * const pi, PointType * const po, st
     po->z = p_global(2);
     po->intensity = pi->intensity;
 }
-
 
 void pointBodyToWorld(PointType const * const pi, PointType * const po)
 {
