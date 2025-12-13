@@ -87,7 +87,7 @@ condition_variable sig_buffer;
 mutex veloLock;
 
 string root_dir = ROOT_DIR;
-string map_file_path, lid_topic, lid_topic_left, lid_topic_right, imu_topic, wheel_topic;
+string map_file_path, lid_topic, imu_topic, wheel_topic;
 double wheel_velocity = 0.0;
 
 double res_mean_last = 0.05, total_residual = 0.0;
@@ -138,13 +138,6 @@ V3D Wheel_T_wrt_IMU(Zero3d);
 M3D Wheel_R_wrt_IMU(Eye3d);
 V1D wheel_s(1.0);
 
-// for kaist
-vector<double> rightLidarToImuTransform;
-Eigen::Matrix4d rightLidarToImu;
-
-vector<double> leftLidarToImuTransform;
-Eigen::Matrix4d leftLidarToImu;
-
 /*** EKF inputs and output ***/
 MeasureGroup Measures;
 esekfom::esekf<state_ikfom, 12, input_ikfom> kf;
@@ -180,28 +173,7 @@ vector<double>       extrinR_Gnss2IMU(9, 0.0);
 
 using PointXYZIRT = velodyne_ros::Point;
 
-// fuse two lidar data for kaist dataset
-pcl::PointCloud<PointXYZIRT>::Ptr pointCloudLeftIn;
-pcl::PointCloud<PointXYZIRT>::Ptr pointCloudRightIn;
-pcl::PointCloud<PointXYZIRT>::Ptr pointCloudLeft;
-pcl::PointCloud<PointXYZIRT>::Ptr pointCloudRight;
 pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
-double leftTime = -1;
-double rightTime = -1;
-double middleTime = -1;
-
-deque<sensor_msgs::PointCloud2> cachePointCloudLeftQueue;
-deque<sensor_msgs::PointCloud2> cachePointCloudRightQueue;
-deque<pcl::PointCloud<PointXYZIRT>::Ptr> pointCloudLeftQueue;
-deque<pcl::PointCloud<PointXYZIRT>::Ptr> pointCloudRightQueue;
-deque<double> timeLeftQueue;
-deque<double> timeRightQueue;
-
-sensor_msgs::PointCloud2 currentPointCloudLeftMsg;
-sensor_msgs::PointCloud2 currentPointCloudRightMsg;
-
-double left_pc_time = -1;
-double right_pc_time = -1;
 
 void SigHandle(int sig)
 {
@@ -337,141 +309,6 @@ void lasermap_fov_segment()
     double delete_begin = omp_get_wtime();
     if(cub_needrm.size() > 0) kdtree_delete_counter = ikdtree.Delete_Point_Boxes(cub_needrm);
     kdtree_delete_time = omp_get_wtime() - delete_begin;
-}
-
-pcl::PointCloud<PointXYZIRT>::Ptr transformPointCloud_kaist(pcl::PointCloud<PointXYZIRT>::Ptr cloudIn, Eigen::Matrix4d &transform) {
-
-    pcl::PointCloud<PointXYZIRT>::Ptr cloudOut(new pcl::PointCloud<PointXYZIRT>());
-
-    int cloudSize = cloudIn->size();
-    cloudOut->resize(cloudSize);
-
-#pragma omp parallel for num_threads(8)
-    for (int i = 0; i < cloudSize; ++i)
-    {
-        const auto &pointFrom = cloudIn->points[i];
-        cloudOut->points[i].x = transform(0,0) * pointFrom.x + transform(0,1) * pointFrom.y + transform(0,2) * pointFrom.z + transform(0,3);
-        cloudOut->points[i].y = transform(1,0) * pointFrom.x + transform(1,1) * pointFrom.y + transform(1,2) * pointFrom.z + transform(1,3);
-        cloudOut->points[i].z = transform(2,0) * pointFrom.x + transform(2,1) * pointFrom.y + transform(2,2) * pointFrom.z + transform(2,3);
-        cloudOut->points[i].intensity = pointFrom.intensity;
-        cloudOut->points[i].ring = pointFrom.ring;
-        // cloudOut->points[i].time = pointFrom.time;
-    }
-    return cloudOut;
-}
-
-bool mergePointCloud()
-{
-    std::lock_guard<std::mutex> lock1(veloLock);
-
-    if(pointCloudLeftQueue.size() > 0 && pointCloudRightQueue.size() > 0 )
-    {
-//        cout << pointCloudLeftQueue.size() << " " << pointCloudRightQueue.size() << endl;
-        pointCloudLeft = std::move(pointCloudLeftQueue.front());
-        pointCloudLeftQueue.pop_front();
-        leftTime = std::move(timeLeftQueue.front());
-        timeLeftQueue.pop_front();
-        pointCloudRight = std::move(pointCloudRightQueue.front());
-        pointCloudRightQueue.pop_front();
-        rightTime = std::move(timeRightQueue.front());
-        timeRightQueue.pop_front();
-        middleTime = (leftTime + rightTime) / 2;
-//        cout << "left time " << to_string_with_precision(leftTime) << "right time " << to_string_with_precision(rightTime) << endl;
-        *laserCloudIn = *pointCloudLeft + *pointCloudRight;
-    }
-    else
-    {
-        ROS_WARN("Waiting for point cloud data ...");
-        return false;
-    }
-    return true;
-}
-
-void pointCloudLeftHandler(const sensor_msgs::PointCloud2ConstPtr& leftPointCloud)
-{
-    left_pc_time = leftPointCloud->header.stamp.toSec();
-//    cout << "left_pc_time " << to_string_with_precision(left_pc_time) << endl;
-
-    currentPointCloudLeftMsg = *leftPointCloud;
-
-    pcl::moveFromROSMsg(currentPointCloudLeftMsg, *pointCloudLeftIn);
-
-    if (pointCloudLeftIn->is_dense == false)
-    {
-        ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
-        ros::shutdown();
-    }
-
-
-    pcl::PointCloud<PointXYZIRT>::Ptr pointCloudOut(new pcl::PointCloud<PointXYZIRT>());
-    pointCloudOut = transformPointCloud_kaist(pointCloudLeftIn, leftLidarToImu);
-
-    if (!pointCloudLeftQueue.empty())
-    {
-        ROS_WARN_STREAM("pointCloudLeftQueue.size() " << pointCloudLeftQueue.size());
-        pointCloudLeftQueue.pop_front();
-        timeLeftQueue.pop_front();
-    }
-    pointCloudLeftQueue.push_back(pointCloudOut);
-    timeLeftQueue.push_back(currentPointCloudLeftMsg.header.stamp.toSec());
-
-    if (!mergePointCloud()){
-        return;
-    }
-    sensor_msgs::PointCloud2 msgin;
-    pcl::toROSMsg(*laserCloudIn, msgin);
-    msgin.header.stamp = ros::Time().fromSec(rightTime);
-    sensor_msgs::PointCloud2::Ptr msg(new sensor_msgs::PointCloud2(msgin));
-
-    mtx_buffer.lock();
-    scan_count++;
-    double preprocess_start_time = omp_get_wtime();
-    if (msg->header.stamp.toSec() < last_timestamp_lidar)
-    {
-        ROS_ERROR("lidar loop back, clear buffer");
-        lidar_buffer.clear();
-    }
-
-    PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-    p_pre->process(msg, ptr);
-    lidar_buffer.push_back(ptr);
-    time_buffer.push_back(msg->header.stamp.toSec());
-    last_timestamp_lidar = msg->header.stamp.toSec();
-    s_plot11[scan_count] = omp_get_wtime() - preprocess_start_time;
-    mtx_buffer.unlock();
-    sig_buffer.notify_all();
-}
-
-void pointCloudRightHandler(const sensor_msgs::PointCloud2ConstPtr& rightPointCloud)
-{
-    std::lock_guard<std::mutex> lock1(veloLock);
-
-    right_pc_time = rightPointCloud->header.stamp.toSec();
-//    cout << "right_pc_time " << to_string_with_precision(right_pc_time) << endl;
-
-    currentPointCloudRightMsg = *rightPointCloud;
-
-    pcl::moveFromROSMsg(currentPointCloudRightMsg, *pointCloudRightIn);
-
-    if(pointCloudRightIn->is_dense == false)
-    {
-        ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
-        ros::shutdown();
-    }
-
-    pcl::PointCloud<PointXYZIRT>::Ptr pointCloudOut(new pcl::PointCloud<PointXYZIRT>());
-    pointCloudOut = transformPointCloud_kaist(pointCloudRightIn, rightLidarToImu);
-
-    if (!pointCloudRightQueue.empty()){
-        ROS_WARN_STREAM("pointCloudRightQueue.size() " << pointCloudRightQueue.size());
-        pointCloudRightQueue.pop_front();
-        timeRightQueue.pop_front();
-    }
-    pointCloudRightQueue.push_back(pointCloudOut);
-    timeRightQueue.push_back(currentPointCloudRightMsg.header.stamp.toSec());
-
-    return;
-
 }
 
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
@@ -1192,16 +1029,8 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
 int main(int argc, char** argv)
 {
     // allocateMemory();
-    pointCloudLeftIn.reset(new pcl::PointCloud<PointXYZIRT>());
-    pointCloudRightIn.reset(new pcl::PointCloud<PointXYZIRT>());
-    pointCloudLeft.reset(new pcl::PointCloud<PointXYZIRT>());
-    pointCloudRight.reset(new pcl::PointCloud<PointXYZIRT>());
     laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
 
-    pointCloudLeftIn->clear();
-    pointCloudRightIn->clear();
-    pointCloudLeft->clear();
-    pointCloudRight->clear();
     laserCloudIn->clear();
 
     ros::init(argc, argv, "laserMapping");
@@ -1214,8 +1043,6 @@ int main(int argc, char** argv)
     nh.param<int>("max_iteration",NUM_MAX_ITERATIONS,4);
     nh.param<string>("map_file_path",map_file_path,"");
     nh.param<string>("common/lid_topic",lid_topic,"/livox/lidar");
-    nh.param<string>("common/lid_topic_left", lid_topic_left, "/livox/lidar");
-    nh.param<string>("common/lid_topic_right", lid_topic_right, "/livox/lidar");
     nh.param<string>("common/imu_topic", imu_topic,"/livox/imu");
     nh.param<string>("common/wheel_topic", wheel_topic,"/chinook/husky_velocity_controller/odom");
     nh.param<bool>("common/time_sync_en", time_sync_en, false);
@@ -1248,14 +1075,7 @@ int main(int argc, char** argv)
     nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
-    nh.param<vector<double>>("mapping/right_lidar_to_imu", rightLidarToImuTransform,vector<double>());
 
-    // kaist
-    if (!rightLidarToImuTransform.empty())
-        rightLidarToImu = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(rightLidarToImuTransform.data(), 4, 4);
-    nh.param<vector<double>>("mapping/left_lidar_to_imu", leftLidarToImuTransform,vector<double>());
-    if (!leftLidarToImuTransform.empty())
-        leftLidarToImu = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(leftLidarToImuTransform.data(), 4, 4);
     cout << "p_pre->lidar_type " << p_pre->lidar_type << endl;
 
     nh.param<bool>("wheel/extrinsic_est_wheel", extrinsic_est_wheel, true);
@@ -1333,8 +1153,6 @@ int main(int argc, char** argv)
     ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? \
         nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : \
         nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
-    ros::Subscriber subPointCloudLeft  = nh.subscribe(lid_topic_left, 200000, pointCloudLeftHandler);
-    ros::Subscriber subPointCloudRight = nh.subscribe(lid_topic_right, 200000, pointCloudRightHandler);
     ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
     ros::Subscriber sub_wheel;
     if (USE_WHEEL)
