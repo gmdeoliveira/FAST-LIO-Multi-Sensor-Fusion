@@ -101,6 +101,12 @@ bool   point_selected_surf[100000] = {0};
 bool   lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
 
+// adaptive wheel odometry covariance
+float gamma_vx = 0.05;
+float gamma_omegaz = 0.01;
+float delta_vx = 0.0001; 
+float delta_omegaz = 0.00001;
+
 vector<vector<int>>  pointSearchInd_surf; 
 vector<BoxPointType> cub_needrm;
 vector<PointVector>  Nearest_Points;
@@ -1021,11 +1027,11 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         return;
     }
     if (opt_with_wheel){
-        ekfom_data.z = MatrixXd::Zero(3, 1);
-        ekfom_data.h_x = MatrixXd::Zero(3, 33); 
-        ekfom_data.h.resize(3);
-        ekfom_data.R = MatrixXd::Zero(3, 3); 
-        ekfom_data.h_v = MatrixXd::Identity(3, 3);
+        ekfom_data.z = MatrixXd::Zero(2, 1);
+        ekfom_data.h_x = MatrixXd::Zero(2, 33); 
+        ekfom_data.h.resize(2);
+        ekfom_data.R = MatrixXd::Zero(2, 2); 
+        ekfom_data.h_v = MatrixXd::Identity(2, 2);
         
         // residual
         M3D angv_crossmat;
@@ -1034,44 +1040,58 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         angv_crossmat << SKEW_SYM_MATRX(gyr_vec);
         wheel_velocity = Measures.wheel.front()->twist.twist.linear.x;
         V3D wheel_v_vec(wheel_velocity,0.0,0.0);
-//        ROS_WARN_STREAM("wheel_velocity " << wheel_velocity);
+        ROS_WARN_STREAM("wheel_velocity " << wheel_velocity);
         V3D res = wheel_v_vec * s.wheel_s - s.offset_R_W_I.toRotationMatrix().transpose() * (s.rot.toRotationMatrix().transpose() * s.vel + angv_crossmat * s.offset_T_W_I);
-//        ROS_WARN_STREAM("res " << res.transpose());
-        ekfom_data.h(0) = res.x();
-        ekfom_data.h(1) = res.y();
-        ekfom_data.h(2) = res.z();
+        ROS_WARN_STREAM("res " << res.transpose());
+        ekfom_data.h(0) = res.x(); 
         
+        // *** Start of New Angular Velocity Residual Calculation ***
+
+        // Get measured angular velocity from wheel odometry
+        double meas_wz = Measures.wheel.front()->twist.twist.angular.z;
+
+        // Get predicted angular velocity from IMU state (already available as gyr_vec)
+        // Transform predicted angular velocity to wheel frame
+        V3D pred_w_W = s.offset_R_W_I.toRotationMatrix().transpose() * gyr_vec;
+
+        // Calculate the angular velocity residual (z-component)
+        ekfom_data.h(1) = meas_wz - pred_w_W(2);
+
+        // *** End of New Angular Velocity Residual Calculation ***
+
         // jacobian
         M3D rot_crossmat;
         V3D tmp_vel = s.rot.toRotationMatrix().transpose() * s.vel;
         rot_crossmat << SKEW_SYM_MATRX(tmp_vel); // Antisymmetric matrix of point coordinates in the current state IMU system [当前状态imu系下 点坐标反对称矩阵]
-        ekfom_data.h_x.block<3, 3>(0,3) = -s.offset_R_W_I.toRotationMatrix().transpose() * rot_crossmat; // diff w.r.t. rot
-        ekfom_data.h_x.block<3, 3>(0,12) = -s.offset_R_W_I.toRotationMatrix().transpose() * s.rot.toRotationMatrix().transpose(); // diff w.r.t. vel
+        ekfom_data.h_x.block<1, 3>(0,3) = -(s.offset_R_W_I.toRotationMatrix().transpose() * rot_crossmat).row(0); // diff w.r.t. rot
+        ekfom_data.h_x.block<1, 3>(0,12) = -(s.offset_R_W_I.toRotationMatrix().transpose() * s.rot.toRotationMatrix().transpose()).row(0); // diff w.r.t. vel
+        
         M3D bg_crossmat;
         bg_crossmat << SKEW_SYM_MATRX(s.offset_T_W_I);
-        ekfom_data.h_x.block<3, 3>(0,15) = -s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat; // diff w.r.t. bg
+        ekfom_data.h_x.block<1, 3>(0,15) = -(s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat).row(0); // diff w.r.t. bg
+        
+        ekfom_data.h_x.block<1, 3>(1,15) = -s.offset_R_W_I.toRotationMatrix().transpose().row(2); // diff w.r.t. bg (new angular velocity residual)
+
         if (extrinsic_est_wheel){
             V3D tmp_vec = s.offset_R_W_I.toRotationMatrix().transpose() * (s.rot.toRotationMatrix().transpose() * s.vel + angv_crossmat * s.offset_T_W_I);
             M3D ex_rot_crossmat;
             ex_rot_crossmat << SKEW_SYM_MATRX(tmp_vec);
-            ekfom_data.h_x.block<3, 3>(0,23) = -ex_rot_crossmat;
-            ekfom_data.h_x.block<3, 3>(0,26) = -s.offset_R_W_I.toRotationMatrix().transpose() * angv_crossmat;
+            ekfom_data.h_x.block<1, 3>(0,23) = -ex_rot_crossmat.row(0);
+            ekfom_data.h_x.block<1, 3>(0,26) = -(s.offset_R_W_I.toRotationMatrix().transpose() * angv_crossmat).row(0);
+
+            // New angular velocity residual jacobian w.r.t. extrinsic rotation
+            M3D pred_w_W_crossmat;
+            pred_w_W_crossmat << SKEW_SYM_MATRX(pred_w_W);
+            ekfom_data.h_x.block<1, 3>(1,23) = -pred_w_W_crossmat.row(2);
         }
         if (scale_est_wheel){
-            ekfom_data.h_x.block<3, 1>(0,29) = wheel_v_vec;
+            ekfom_data.h_x(0,29) = wheel_v_vec.x(); // diff w.r.t. wheel scale
         }
         
         // covariance
-        Eigen::Matrix3d tmp_mat = s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat;
-        Eigen::Matrix3d cov_mat = Eigen::Matrix3d::Identity();
-        cov_mat(0, 0) = wheel_cov;
-        if (gyr_vec.norm() > 0.3){
-            cov_mat(1, 1) = wheel_velocity * gyr_vec.norm();
-        }else{
-            cov_mat(1, 1) = nhc_y_cov;
-        }
-        cov_mat(2, 2) = nhc_z_cov;
-        cov_mat = cov_mat + tmp_mat * tmp_mat.transpose() * gyr_cov;
+        Eigen::Matrix2d cov_mat = MatrixXd::Zero(2, 2);
+        cov_mat(0, 0) = gamma_vx * abs(meas_wz - gyr[2]) + delta_vx;
+        cov_mat(1, 1) = gamma_omegaz * abs(meas_wz - gyr[2]) + delta_omegaz;
         ekfom_data.R = cov_mat;
         return;
     }
