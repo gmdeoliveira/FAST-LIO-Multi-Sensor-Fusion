@@ -16,9 +16,9 @@ wheel:
     wheel_cov: 0.01
     nhc_y_cov: 0.1
     nhc_z_cov: 0.001
-    extrinsic_est_wheel: false
-    scale_est_wheel: false
-    extrinsic_T: [ 0, 0, 1 ]
+    extrinsic_est_wheel: true
+    scale_est_wheel: true
+    extrinsic_T: [ 0, 0, -0.16 ]
     extrinsic_R: [ 1, 0, 0,
                    0, 1, 0,
                    0, 0, 1 ]

@@ -729,7 +729,7 @@ bool sync_packages(MeasureGroup &meas)
         double wheel_time = wheel_buffer.front()->header.stamp.toSec();
         //Record wheel data; wheel time is less than the end time of the current frame's lidar. [记录wheel数据，wheel时间小于当前帧lidar结束时间]
         while ((!wheel_buffer.empty()) && (wheel_time < lidar_end_time)) 
-                        {
+        {
             wheel_time = wheel_buffer.front()->header.stamp.toSec();
             if (wheel_time > lidar_end_time)
                             break;
@@ -1022,10 +1022,11 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
     }
     if (opt_with_wheel){
         ekfom_data.z = MatrixXd::Zero(3, 1);
-        ekfom_data.h_x = MatrixXd::Zero(3, 33);
+        ekfom_data.h_x = MatrixXd::Zero(3, 33); 
         ekfom_data.h.resize(3);
-        ekfom_data.R = MatrixXd::Zero(3, 3);
+        ekfom_data.R = MatrixXd::Zero(3, 3); 
         ekfom_data.h_v = MatrixXd::Identity(3, 3);
+        
         // residual
         M3D angv_crossmat;
         V3D gyr = kf.get_input().gyro;
@@ -1039,6 +1040,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         ekfom_data.h(0) = res.x();
         ekfom_data.h(1) = res.y();
         ekfom_data.h(2) = res.z();
+        
         // jacobian
         M3D rot_crossmat;
         V3D tmp_vel = s.rot.toRotationMatrix().transpose() * s.vel;
@@ -1058,6 +1060,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         if (scale_est_wheel){
             ekfom_data.h_x.block<3, 1>(0,29) = wheel_v_vec;
         }
+        
         // covariance
         Eigen::Matrix3d tmp_mat = s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat;
         Eigen::Matrix3d cov_mat = Eigen::Matrix3d::Identity();
