@@ -21,7 +21,7 @@ MTK_BUILD_MANIFOLD(state_ikfom,
 ((S2, grav)) //S2 manifold, grav is negative. [S2流形,grav为负值]
 ((SO3, offset_R_W_I))
 ((vect3, offset_T_W_I))
-((vect1, wheel_s))
+((vect1, wheel_s)) //wheel scale (probably changing from 0 to 1)
 ((SO3, offset_R_G_I))
 );
 
