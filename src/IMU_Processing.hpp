@@ -377,7 +377,8 @@ void ImuProcess::UndistortPcl(MeasureGroup &meas, esekfom::esekf<state_ikfom, 12
               if (wheel_time < tail->header.stamp.toSec()){ // wheel 位于两个imu之间
                   opt_with_wheel = true;
                   kf_state.update_iterated_dyn_share(); // wheel更新
-//                cout << "wheel update !" << endl;
+
+                  //cout << "velocity after wheel update: " << kf_state.get_x().vel.transpose() << endl;
                   opt_with_wheel = false;
                   meas.wheel.pop_front();
               }
