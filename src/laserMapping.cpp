@@ -867,21 +867,24 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         angv_crossmat << SKEW_SYM_MATRX(gyr_vec);
         wheel_velocity = Measures.wheel.front()->twist.twist.linear.x;
         V3D wheel_v_vec(wheel_velocity,0.0,0.0);
-//        ROS_WARN_STREAM("wheel_velocity " << wheel_velocity);
-        V3D res = wheel_v_vec * s.wheel_s - s.offset_R_W_I.toRotationMatrix().transpose() * (s.rot.toRotationMatrix().transpose() * s.vel + angv_crossmat * s.offset_T_W_I);
-//        ROS_WARN_STREAM("res " << res.transpose());
+        //ROS_WARN_STREAM("wheel_velocity " << wheel_velocity);
+        //V3D res = wheel_v_vec * s.wheel_s - s.offset_R_W_I.toRotationMatrix().transpose() * (s.rot.toRotationMatrix().transpose() * s.vel + angv_crossmat * s.offset_T_W_I);
+        V3D res = wheel_v_vec * s.wheel_s - s.vel; //JUST A TEST TO SEE IF IT WORKS
+        ROS_WARN_STREAM("IKFoM velocity " << s.vel.transpose());
+        ROS_WARN_STREAM("res " << res.transpose());
         ekfom_data.h(0) = res.x();
-        ekfom_data.h(1) = res.y();
-        ekfom_data.h(2) = res.z();
+        ekfom_data.h(1) = 0.0; //res.y();
+        ekfom_data.h(2) = 0.0; //res.z();
         // jacobian
         M3D rot_crossmat;
         V3D tmp_vel = s.rot.toRotationMatrix().transpose() * s.vel;
         rot_crossmat << SKEW_SYM_MATRX(tmp_vel); // 当前状态imu系下 点坐标反对称矩阵
-        ekfom_data.h_x.block<3, 3>(0,3) = -s.offset_R_W_I.toRotationMatrix().transpose() * rot_crossmat; // diff w.r.t. rot
-        ekfom_data.h_x.block<3, 3>(0,12) = -s.offset_R_W_I.toRotationMatrix().transpose() * s.rot.toRotationMatrix().transpose(); // diff w.r.t. vel
+        //ekfom_data.h_x.block<3, 3>(0,3) = -s.offset_R_W_I.toRotationMatrix().transpose() * rot_crossmat; // diff w.r.t. rot //JUST A TEST TO SEE IF IT WORKS
+        //ekfom_data.h_x.block<3, 3>(0,12) = -s.offset_R_W_I.toRotationMatrix().transpose() * s.rot.toRotationMatrix().transpose(); // diff w.r.t. vel //JUST A TEST TO SEE IF IT WORKS
+        ekfom_data.h_x(0,12) = -1.0; //JUST A TEST TO SEE IF IT WORKS
         M3D bg_crossmat;
         bg_crossmat << SKEW_SYM_MATRX(s.offset_T_W_I);
-        ekfom_data.h_x.block<3, 3>(0,15) = -s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat; // diff w.r.t. bg
+        //ekfom_data.h_x.block<3, 3>(0,15) = -s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat; // diff w.r.t. bg //JUST A TEST TO SEE IF IT WORKS
         if (extrinsic_est_wheel){
             V3D tmp_vec = s.offset_R_W_I.toRotationMatrix().transpose() * (s.rot.toRotationMatrix().transpose() * s.vel + angv_crossmat * s.offset_T_W_I);
             M3D ex_rot_crossmat;
@@ -896,11 +899,12 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
         Eigen::Matrix3d tmp_mat = s.offset_R_W_I.toRotationMatrix().transpose() * bg_crossmat;
         Eigen::Matrix3d cov_mat = Eigen::Matrix3d::Identity();
         cov_mat(0, 0) = wheel_cov;
-        if (gyr_vec.norm() > 0.3){
-            cov_mat(1, 1) = wheel_velocity * gyr_vec.norm();
-        }else{
-            cov_mat(1, 1) = nhc_y_cov;
-        }
+        // if (gyr_vec.norm() > 0.3){
+        //     cov_mat(1, 1) = wheel_velocity * gyr_vec.norm();
+        // }else{
+        //     cov_mat(1, 1) = nhc_y_cov;
+        // }
+        cov_mat(1, 1) = nhc_y_cov;
         cov_mat(2, 2) = nhc_z_cov;
         cov_mat = cov_mat + tmp_mat * tmp_mat.transpose() * gyr_cov;
         ekfom_data.R = cov_mat;
@@ -974,7 +978,7 @@ void h_share_model(state_ikfom &s, esekfom::dyn_share_datastruct<double> &ekfom_
             effct_feat_num ++;
         }
     }
-//    ROS_WARN_STREAM("effct_feat_num " << effct_feat_num);
+    //ROS_WARN_STREAM("effct_feat_num " << effct_feat_num);
 
     if (effct_feat_num < 1)
     {
@@ -1274,8 +1278,11 @@ int main(int argc, char** argv)
             /*** iterated state estimation ***/
             double t_update_start = omp_get_wtime();
             double solve_H_time = 0;
+            //cout << "Y coordinate before update: " << state_point.pos(1) << endl; //DEBUG
             kf.update_iterated_dyn_share_modified(LASER_POINT_COV, solve_H_time);
+            //cout << "Y coordinate after update: " << state_point.pos(1) << endl; //DEBUG
             state_point = kf.get_x();
+            ROS_WARN_STREAM("IKFoM velocity " << state_point.vel.transpose());
             euler_cur = SO3ToEuler(state_point.rot);
             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
             geoQuat.x = state_point.rot.coeffs()[0];

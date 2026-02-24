@@ -367,22 +367,26 @@ void ImuProcess::UndistortPcl(MeasureGroup &meas, esekfom::esekf<state_ikfom, 12
             }
         }
     }
-      /*** update by wheel meas ***/
-      if (USE_WHEEL && !meas.wheel.empty())
-      {
-          double wheel_time = meas.wheel.front()->header.stamp.toSec();
-          if (wheel_time < head->header.stamp.toSec()){
-              meas.wheel.pop_front();
-          }else{
-              if (wheel_time < tail->header.stamp.toSec()){ // wheel 位于两个imu之间
-                  opt_with_wheel = true;
-                  kf_state.update_iterated_dyn_share(); // wheel更新
-//                cout << "wheel update !" << endl;
-                  opt_with_wheel = false;
-                  meas.wheel.pop_front();
-              }
-          }
-      }
+    /*** update by wheel meas ***/
+    if (USE_WHEEL && !meas.wheel.empty())
+    {
+        double wheel_time = meas.wheel.front()->header.stamp.toSec();
+        if (wheel_time < head->header.stamp.toSec()){
+            meas.wheel.pop_front();
+        }else{
+            if (wheel_time < tail->header.stamp.toSec()){ // wheel 位于两个imu之间
+                opt_with_wheel = true;
+                state_ikfom state_before_wheel_update = kf_state.get_x(); //DEBUG
+                cout << "Y coordinate before wheel update: " << state_before_wheel_update.pos(1) << endl; //DEBUG
+                kf_state.update_iterated_dyn_share(); // wheel更新
+                cout << "wheel update !" << endl;
+                state_ikfom state_after_wheel_update = kf_state.get_x(); //DEBUG
+                cout << "Y coordinate after wheel update: " << state_after_wheel_update.pos(1) << endl; //DEBUG
+                opt_with_wheel = false;
+                meas.wheel.pop_front();
+            }
+        }
+    }
 
     /* save the poses at each IMU measurements */
     imu_state = kf_state.get_x();

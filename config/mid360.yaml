@@ -2,7 +2,7 @@ common:
     lid_topic:  "/livox/lidar_CustomMsg"
     imu_topic:  "/imu/data"
     wheel_topic: "/wheel_odom"
-    use_wheel: true
+    use_wheel: false
     time_sync_en: false         # ONLY turn on when external time synchronization is really not possible
     time_offset_lidar_to_imu: 0.0 # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
                                   # This param will take effect no matter what time_sync_en is. So if the time offset is not known exactly, please set as 0.0
@@ -13,11 +13,11 @@ preprocess:
     blind: 0.5
 
 wheel:
-    wheel_cov: 0.01
-    nhc_y_cov: 0.1
+    wheel_cov: 0.001
+    nhc_y_cov: 1
     nhc_z_cov: 0.001
-    extrinsic_est_wheel: true
-    scale_est_wheel: true
+    extrinsic_est_wheel: false
+    scale_est_wheel: false
     extrinsic_T: [ 0, 0, -0.16 ]
     extrinsic_R: [ 1, 0, 0,
                    0, 1, 0,
@@ -31,7 +31,7 @@ mapping:
     b_gyr_cov: 0.0001
     fov_degree:    360
     det_range:     100.0
-    extrinsic_est_en:  true      # true: enable the online estimation of IMU-LiDAR extrinsic
+    extrinsic_est_en:  false      # true: enable the online estimation of IMU-LiDAR extrinsic
     extrinsic_T: [ 0, 0, 0.15 ]
     extrinsic_R: [ 1, 0, 0,
                    0, 1, 0,
